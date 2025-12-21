@@ -12,6 +12,9 @@ from pytorch_lightning.loggers import WandbLogger
 import wandb
 import os
 
+# Enable Tensor Cores for H100
+torch.set_float32_matmul_precision('high')
+
 wandb_logger = WandbLogger(project="MethPrediction")
 os.environ['WANDB_API_KEY'] = '2a1829519497eaab2f05c336830a1d4b0a3a8238'
 
@@ -71,9 +74,10 @@ class MethDataModule(pl.LightningDataModule):
         self.histone_names = ['H3K4me3', 'H3K36me2', 'H3K27me3', 'H3K9me3']
     
     def prepare_data(self):
-        self.data = np.load(self.npz_path, allow_pickle=True)
-    
+        pass
+
     def setup(self, stage=None):
+        self.data = np.load(self.npz_path, allow_pickle=True)
         split_index = int(self.train_split * self.data['dna'].shape[0]) ### 80% of the data will be for training
 
         self.train_dataset = MethDataset(sequence = self.data['dna'][:split_index],
@@ -89,10 +93,10 @@ class MethDataModule(pl.LightningDataModule):
                                 apply_log10=self.transform)
         
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=32)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=8)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=32)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=8)
 
 data_module = MethDataModule(npz_path='chr19.npz', train_split=0.8, batch_size=32)
 
@@ -231,7 +235,8 @@ class Model(pl.LightningModule):
         sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3, methylation, coordinates = batch
         prediction = self.forward(sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3)
         loss = self.loss_fn(prediction, methylation.unsqueeze(-1).float())
-        self.log('test_loss', loss)
+        print(f"Loss !!!!!: {loss.detach() / self.first_epoch_loss * 100}") ###
+        self.log('test_loss', loss.detach() / self.first_epoch_loss * 100)
         return loss
     
     # def on_test_epoch_end(self):
@@ -247,7 +252,7 @@ class Model(pl.LightningModule):
 
 model = Model(DNA_kernel_sizes=(10,10,5), DNA_strides=(2,3,3), DNA_conv_channels = 2)
 
-trainer = pl.Trainer(max_epochs=5, logger=wandb_logger)
+trainer = pl.Trainer(max_epochs=300, logger=wandb_logger, accelerator="gpu", devices=-1)
 
 model = torch.compile(model)
 # Training loop
