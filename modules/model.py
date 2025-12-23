@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
+import torchmetrics
 
 class Model(pl.LightningModule):
     def __init__(self, DNA_kernel_sizes, DNA_strides, DNA_conv_channels, dropout=0.3, loss_fn=nn.BCEWithLogitsLoss, optimizer=torch.optim.Adam, learning_rate=1e-3):
@@ -15,6 +16,31 @@ class Model(pl.LightningModule):
         self.learning_rate = learning_rate
         self.first_epoch_loss = None
         self.first_test_loss = None
+
+        # self.train_acc = torchmetrics.classification.Accuracy(task="binary")
+        # self.test_acc = torchmetrics.classification.Accuracy(task="binary")
+
+        self.train_metrics = torchmetrics.MetricCollection(
+            {
+                "accuracy": torchmetrics.classification.Accuracy(task="binary"),
+                "F1": torchmetrics.classification.F1Score(task="binary"),
+                "AUROC": torchmetrics.classification.AUROC(task="binary"),
+                "Precision": torchmetrics.classification.Precision(task="binary"),
+                "Recall": torchmetrics.classification.Recall(task="binary")
+            },
+            prefix="train_",
+        )
+
+        self.test_metrics = torchmetrics.MetricCollection(
+            {
+                "accuracy": torchmetrics.classification.Accuracy(task="binary"),
+                "F1": torchmetrics.classification.F1Score(task="binary"),
+                "AUROC": torchmetrics.classification.AUROC(task="binary"),
+                "Precision": torchmetrics.classification.Precision(task="binary"),
+                "Recall": torchmetrics.classification.Recall(task="binary")
+            },
+            prefix="test_",
+        )
 
         
         ############## Modules and architecture
@@ -50,7 +76,6 @@ class Model(pl.LightningModule):
                         stride=self.DNA_layer3_stride, padding=0)
         )
 
-
         self.H3K36me2_module = nn.Sequential(
             nn.Conv1d(in_channels=1, out_channels=DNA_conv_channels,
                      kernel_size=self.DNA_layer1_kernel_size,
@@ -66,7 +91,6 @@ class Model(pl.LightningModule):
             nn.MaxPool1d(kernel_size=self.DNA_layer3_kernel_size,
                         stride=self.DNA_layer3_stride, padding=0)
         )
-
 
         self.H3K27me3_module = nn.Sequential(
             nn.Conv1d(in_channels=1, out_channels=DNA_conv_channels,
@@ -84,7 +108,6 @@ class Model(pl.LightningModule):
                         stride=self.DNA_layer3_stride, padding=0)
         )
 
-
         self.H3K9me3_module = nn.Sequential(
             nn.Conv1d(in_channels=1, out_channels=DNA_conv_channels,
                      kernel_size=self.DNA_layer1_kernel_size,
@@ -100,7 +123,6 @@ class Model(pl.LightningModule):
             nn.MaxPool1d(kernel_size=self.DNA_layer3_kernel_size,
                         stride=self.DNA_layer3_stride, padding=0)
         )
-
 
         #### Cross-Attention
         self.attn = nn.MultiheadAttention(embed_dim=25, num_heads=5, batch_first=True)
@@ -143,11 +165,15 @@ class Model(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3, methylation, coordinates = batch
-        methylation = torch.round(methylation)
+        methylation = torch.round(methylation).int()
         
         prediction = self.forward(sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3)
         loss = self.loss_fn(prediction, methylation.unsqueeze(-1).float())
         self.log('train_loss', loss, on_epoch=True)
+
+        batch_metrics = self.train_metrics(torch.sigmoid(prediction.squeeze()), methylation)
+        self.log_dict(batch_metrics, on_epoch=True)
+
         return loss
 
     def on_train_epoch_end(self):
@@ -160,7 +186,8 @@ class Model(pl.LightningModule):
             relative = epoch_loss / self.first_epoch_loss * 100
             print(f"Epoch: {self.current_epoch}: train_loss_relative", relative)
             self.log("train_loss_relative", relative)
-    
+        
+        # self.train_metrics.reset()
 
     ############################# NOT USING THIS ######################################
     def validation_step(self, batch, batch_idx):
@@ -173,9 +200,15 @@ class Model(pl.LightningModule):
     
     def test_step(self, batch, batch_idx):
         sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3, methylation, coordinates = batch
+        methylation = torch.round(methylation).int()
+
         prediction = self.forward(sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3)
         loss = self.loss_fn(prediction, methylation.unsqueeze(-1).float())
         self.log('test_loss', loss.detach() / self.first_epoch_loss * 100)
+
+        test_metrics = self.test_metrics(torch.sigmoid(prediction.squeeze()), methylation)
+        self.log_dict(test_metrics, on_epoch=True)
+
         return loss
     
     # def on_test_epoch_end(self):

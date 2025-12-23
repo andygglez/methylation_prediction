@@ -30,21 +30,21 @@ args = parser.parse_args()
 
 
 wandb_logger = WandbLogger(project="MethPrediction")
-# os.environ['WANDB_API_KEY'] = '2a1829519497eaab2f05c336830a1d4b0a3a8238'
+os.environ['WANDB_API_KEY'] = '2a1829519497eaab2f05c336830a1d4b0a3a8238'
 
-# run = wandb.init(
-#     # Set the wandb entity where your project will be logged (generally your team name).
-#     entity="andygglez-meth",
-#     # Set the wandb project where this run will be logged.
-#     project="MethPrediction",
-#     # Track hyperparameters and run metadata.
-#     config={
-#         "learning_rate": 1e-3,
-#         "architecture": "CNN+ATT",
-#         "dataset": "chr19.npz",
-#         "epochs": 5,
-#     },
-# )
+run = wandb.init(
+    entity="andygglez-meth",
+    project="MethPrediction",
+    config={
+        "learning_rate": 1e-3,
+        "architecture": "CNN+ATT",
+        "dataset": args.npz,
+        "batch_size": args.batch_size,
+        "num_workers": args.num_workers,
+        "epochs": args.epochs,
+        "accelerator": args.accelerator
+    },
+)
 
 
 ### Prepare data
