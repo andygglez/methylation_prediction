@@ -107,6 +107,8 @@ class Model(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3, methylation, coordinates = batch
+        methylation = torch.round(methylation)
+        
         prediction = self.forward(sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3)
         loss = self.loss_fn(prediction, methylation.unsqueeze(-1).float())
         self.log('train_loss', loss, on_epoch=True)

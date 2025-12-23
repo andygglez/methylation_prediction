@@ -1,3 +1,5 @@
+import numpy as np
+
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -31,11 +33,12 @@ class MethDataset(Dataset):
         return sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3, methylation, coordinates
 
 class MethDataModule(pl.LightningDataModule):
-    def __init__(self, npz_path, train_split=0.8, batch_size=32, apply_log10=True):
+    def __init__(self, npz_path, train_split=0.8, num_workers=8, batch_size=32, apply_log10=True):
         super().__init__()
         self.npz_path = npz_path
         self.batch_size = batch_size
         self.train_split = train_split
+        self.num_workers = num_workers
         self.transform = apply_log10
         self.histone_names = ['H3K4me3', 'H3K36me2', 'H3K27me3', 'H3K9me3']
     
@@ -59,7 +62,7 @@ class MethDataModule(pl.LightningDataModule):
                                 apply_log10=self.transform)
         
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=8)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=8)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)

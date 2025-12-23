@@ -11,16 +11,26 @@ from pytorch_lightning.loggers import WandbLogger
 
 import wandb
 import os
-
+import argparse
 
 from modules.data_modules import MethDataModule
+from modules.model import Model
 
-# Enable Tensor Cores for H100
-torch.set_float32_matmul_precision('high')
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--npz', type=str)
+parser.add_argument('--batch_size', type=int)
+parser.add_argument('--num_workers', type=int)
+parser.add_argument('--epochs', type=int)
+parser.add_argument('--accelerator', type=str)
+
+
+args = parser.parse_args()
+
 
 wandb_logger = WandbLogger(project="MethPrediction")
-os.environ['WANDB_API_KEY'] = '2a1829519497eaab2f05c336830a1d4b0a3a8238'
-
+# os.environ['WANDB_API_KEY'] = '2a1829519497eaab2f05c336830a1d4b0a3a8238'
 
 # run = wandb.init(
 #     # Set the wandb entity where your project will be logged (generally your team name).
@@ -37,19 +47,14 @@ os.environ['WANDB_API_KEY'] = '2a1829519497eaab2f05c336830a1d4b0a3a8238'
 # )
 
 
-#### Dataset Class
-## Notice that the __init__ method contains an argument `apply_log10`, if you set it to True
-## you will apply a log10 to the raw counts. We can experiment with this
-
 ### Prepare data
-data_module = MethDataModule(npz_path='chr19.npz', train_split=0.8, batch_size=32)
+data_module = MethDataModule(npz_path=args.npz, train_split=0.8, num_workers=args.num_workers, batch_size=args.batch_size)
 
 ### Initialize model
 model = Model(DNA_kernel_sizes=(10,10,5), DNA_strides=(2,3,3), DNA_conv_channels = 2)
 
 ### Training the model
-trainer = pl.Trainer(max_epochs=300, logger=wandb_logger, accelerator="gpu", devices=-1)
-model = torch.compile(model)
+trainer = pl.Trainer(max_epochs=args.epochs, logger=wandb_logger, accelerator=args.accelerator) #, devices=-1
 
-trainer.fit(model=model, train_dataloaders=data_module)
-trainer.test(model=model, dataloaders=data_module)
+trainer.fit(model=model, datamodule=data_module)
+trainer.test(model=model, datamodule=data_module)
