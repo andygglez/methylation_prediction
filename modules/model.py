@@ -3,7 +3,7 @@ import torch.nn as nn
 import pytorch_lightning as pl
 
 class Model(pl.LightningModule):
-    def __init__(self, DNA_kernel_sizes, DNA_strides, DNA_conv_channels, loss_fn=nn.MSELoss, optimizer=torch.optim.Adam, learning_rate=1e-3):
+    def __init__(self, DNA_kernel_sizes, DNA_strides, DNA_conv_channels, dropout=0.3, loss_fn=nn.BCEWithLogitsLoss, optimizer=torch.optim.Adam, learning_rate=1e-3):
         super().__init__()
         # Module parameters
         self.DNA_layer1_kernel_size, self.DNA_layer2_kernel_size, self.DNA_layer3_kernel_size = DNA_kernel_sizes
@@ -19,58 +19,89 @@ class Model(pl.LightningModule):
         
         ############## Modules and architecture
         self.dna_module = nn.Sequential(
-            nn.Conv1d(in_channels=4, out_channels=DNA_conv_channels, kernel_size=(self.DNA_layer1_kernel_size), 
-                        stride=self.DNA_layer1_stride, padding=0),
+            nn.Conv1d(in_channels=4, out_channels=DNA_conv_channels,
+                     kernel_size=self.DNA_layer1_kernel_size,
+                     stride=self.DNA_layer1_stride, padding=0),
+            nn.BatchNorm1d(DNA_conv_channels),  # NUEVO: Batch normalization
             nn.ReLU(),
-            nn.Conv1d(in_channels=DNA_conv_channels, out_channels=1, kernel_size=(self.DNA_layer2_kernel_size), 
-                        stride=self.DNA_layer2_stride, padding=0),
+            nn.Dropout(dropout),  # NUEVO: Dropout para regularización
+            nn.Conv1d(in_channels=DNA_conv_channels, out_channels=DNA_conv_channels//2,
+                     kernel_size=self.DNA_layer2_kernel_size,
+                     stride=self.DNA_layer2_stride, padding=0),
+            nn.BatchNorm1d(DNA_conv_channels//2),  # NUEVO
             nn.ReLU(),
-            nn.MaxPool1d(kernel_size=(self.DNA_layer3_kernel_size), 
+            nn.MaxPool1d(kernel_size=self.DNA_layer3_kernel_size,
                         stride=self.DNA_layer3_stride, padding=0)
         )
 
-        ### 
         self.H3K4me3_module = nn.Sequential(
-            nn.Conv1d(in_channels=1, out_channels=DNA_conv_channels, kernel_size=(self.DNA_layer1_kernel_size), 
-                        stride=self.DNA_layer1_stride, padding=0),
+            nn.Conv1d(in_channels=1, out_channels=DNA_conv_channels,
+                     kernel_size=self.DNA_layer1_kernel_size,
+                     stride=self.DNA_layer1_stride, padding=0),
+            nn.BatchNorm1d(DNA_conv_channels),  # NUEVO
             nn.ReLU(),
-            nn.Conv1d(in_channels=DNA_conv_channels, out_channels=1, kernel_size=(self.DNA_layer2_kernel_size), 
-                        stride=self.DNA_layer2_stride, padding=0),
+            nn.Dropout(dropout),  # NUEVO
+            nn.Conv1d(in_channels=DNA_conv_channels, out_channels=DNA_conv_channels//2,
+                     kernel_size=self.DNA_layer2_kernel_size,
+                     stride=self.DNA_layer2_stride, padding=0),
+            nn.BatchNorm1d(DNA_conv_channels//2),  # NUEVO
             nn.ReLU(),
-            nn.MaxPool1d(kernel_size=(self.DNA_layer3_kernel_size), 
+            nn.MaxPool1d(kernel_size=self.DNA_layer3_kernel_size,
                         stride=self.DNA_layer3_stride, padding=0)
         )
+
+
         self.H3K36me2_module = nn.Sequential(
-            nn.Conv1d(in_channels=1, out_channels=DNA_conv_channels, kernel_size=(self.DNA_layer1_kernel_size), 
-                        stride=self.DNA_layer1_stride, padding=0),
+            nn.Conv1d(in_channels=1, out_channels=DNA_conv_channels,
+                     kernel_size=self.DNA_layer1_kernel_size,
+                     stride=self.DNA_layer1_stride, padding=0),
+            nn.BatchNorm1d(DNA_conv_channels),  # NUEVO
             nn.ReLU(),
-            nn.Conv1d(in_channels=DNA_conv_channels, out_channels=1, kernel_size=(self.DNA_layer2_kernel_size), 
-                        stride=self.DNA_layer2_stride, padding=0),
+            nn.Dropout(dropout),  # NUEVO
+            nn.Conv1d(in_channels=DNA_conv_channels, out_channels=DNA_conv_channels//2,
+                     kernel_size=self.DNA_layer2_kernel_size,
+                     stride=self.DNA_layer2_stride, padding=0),
+            nn.BatchNorm1d(DNA_conv_channels//2),  # NUEVO
             nn.ReLU(),
-            nn.MaxPool1d(kernel_size=(self.DNA_layer3_kernel_size), 
+            nn.MaxPool1d(kernel_size=self.DNA_layer3_kernel_size,
                         stride=self.DNA_layer3_stride, padding=0)
         )
+
+
         self.H3K27me3_module = nn.Sequential(
-            nn.Conv1d(in_channels=1, out_channels=DNA_conv_channels, kernel_size=(self.DNA_layer1_kernel_size), 
-                        stride=self.DNA_layer1_stride, padding=0),
+            nn.Conv1d(in_channels=1, out_channels=DNA_conv_channels,
+                     kernel_size=self.DNA_layer1_kernel_size,
+                     stride=self.DNA_layer1_stride, padding=0),
+            nn.BatchNorm1d(DNA_conv_channels),  # NUEVO
             nn.ReLU(),
-            nn.Conv1d(in_channels=DNA_conv_channels, out_channels=1, kernel_size=(self.DNA_layer2_kernel_size), 
-                        stride=self.DNA_layer2_stride, padding=0),
+            nn.Dropout(dropout),  # NUEVO
+            nn.Conv1d(in_channels=DNA_conv_channels, out_channels=DNA_conv_channels//2,
+                     kernel_size=self.DNA_layer2_kernel_size,
+                     stride=self.DNA_layer2_stride, padding=0),
+            nn.BatchNorm1d(DNA_conv_channels//2),  # NUEVO
             nn.ReLU(),
-            nn.MaxPool1d(kernel_size=(self.DNA_layer3_kernel_size), 
+            nn.MaxPool1d(kernel_size=self.DNA_layer3_kernel_size,
                         stride=self.DNA_layer3_stride, padding=0)
         )
+
+
         self.H3K9me3_module = nn.Sequential(
-            nn.Conv1d(in_channels=1, out_channels=DNA_conv_channels, kernel_size=(self.DNA_layer1_kernel_size), 
-                        stride=self.DNA_layer1_stride, padding=0),
+            nn.Conv1d(in_channels=1, out_channels=DNA_conv_channels,
+                     kernel_size=self.DNA_layer1_kernel_size,
+                     stride=self.DNA_layer1_stride, padding=0),
+            nn.BatchNorm1d(DNA_conv_channels),  # NUEVO
             nn.ReLU(),
-            nn.Conv1d(in_channels=DNA_conv_channels, out_channels=1, kernel_size=(self.DNA_layer2_kernel_size), 
-                        stride=self.DNA_layer2_stride, padding=0),
+            nn.Dropout(dropout),  # NUEVO
+            nn.Conv1d(in_channels=DNA_conv_channels, out_channels=DNA_conv_channels//2,
+                     kernel_size=self.DNA_layer2_kernel_size,
+                     stride=self.DNA_layer2_stride, padding=0),
+            nn.BatchNorm1d(DNA_conv_channels//2),  # NUEVO
             nn.ReLU(),
-            nn.MaxPool1d(kernel_size=(self.DNA_layer3_kernel_size), 
+            nn.MaxPool1d(kernel_size=self.DNA_layer3_kernel_size,
                         stride=self.DNA_layer3_stride, padding=0)
         )
-        
+
+
         #### Cross-Attention
         self.attn = nn.MultiheadAttention(embed_dim=25, num_heads=5, batch_first=True)
 
@@ -81,27 +112,32 @@ class Model(pl.LightningModule):
             nn.ReLU(),
             nn.Linear(100, 10),
             nn.ReLU(),
-            nn.Linear(10, 1),
-            nn.Softplus()
+            nn.Linear(10, 1)
         )
 
     def forward(self, sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3):
         sequence = sequence.to(torch.float32).permute(0, 2, 1) ### Changed to (B,C=4,L=500) to use Conv1D
-        dna_module_output = self.dna_module(sequence)
-
-        H3K4me3_module_output = self.H3K4me3_module(H3K4me3.unsqueeze(1))
-        H3K36me2_module_output = self.H3K36me2_module(H3K36me2.unsqueeze(1))
-        H3K27me3_module_output = self.H3K27me3_module(H3K27me3.unsqueeze(1))
-        H3K9me3_module_output = self.H3K9me3_module(H3K9me3.unsqueeze(1))
+        # histone_stack = torch.stack([H3K4me3, H3K36me2, H3K27me3, H3K9me3]).permute(1,0,2) ### (B, 4, 500)
         
-        stack = torch.cat([dna_module_output, H3K4me3_module_output, H3K36me2_module_output, H3K27me3_module_output, H3K9me3_module_output], dim=1)#.permute(1,0,2) # Not sure if this is ok
+        dna_module_output = self.dna_module(sequence)
+        # histone_stack_output = self.histone_encoder(histone_stack)
+
+        H3K4me3_features = self.H3K4me3_module(H3K4me3.unsqueeze(1))
+        H3K36me2_features = self.H3K36me2_module(H3K36me2.unsqueeze(1))
+        H3K27me3_features = self.H3K27me3_module(H3K27me3.unsqueeze(1))
+        H3K9me3_features = self.H3K9me3_module(H3K9me3.unsqueeze(1))
+        
+        
+        stack = torch.stack([H3K4me3_features, H3K36me2_features, 
+                             H3K27me3_features, H3K9me3_features,
+                             dna_module_output]).permute(1,0,2,3).squeeze(dim=2) # Not sure if this is ok
 
         ### Attention
-        attention_output, attention_weights = self.attn(stack, stack, stack)
-        attention_reshaped = attention_output.reshape(attention_output.size(0), -1)
-        ###
+        attention_output, attention_weights = self.attn(stack, stack, stack, need_weights=True)
+        attention_flattened = attention_output.reshape(attention_output.size(0), -1)
 
-        methylation_prediction = self.fc(attention_reshaped)
+        ### FC
+        methylation_prediction = self.fc(attention_flattened)
 
         return methylation_prediction
     
