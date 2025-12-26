@@ -1,15 +1,25 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 import torchmetrics
 
 class Model(pl.LightningModule):
-    def __init__(self, DNA_kernel_sizes, DNA_strides, DNA_conv_channels, dropout=0.3, loss_fn=nn.BCEWithLogitsLoss, optimizer=torch.optim.Adam, learning_rate=1e-3):
+    def __init__(self, DNA_kernel_sizes, DNA_strides, DNA_conv_channels, linear_layers, 
+                dropout=0.3, loss_fn=nn.BCEWithLogitsLoss, optimizer=torch.optim.Adam, 
+                learning_rate=1e-3):
         super().__init__()
         # Module parameters
         self.DNA_layer1_kernel_size, self.DNA_layer2_kernel_size, self.DNA_layer3_kernel_size = DNA_kernel_sizes
         self.DNA_conv_channels = DNA_conv_channels
         self.DNA_layer1_stride, self.DNA_layer2_stride, self.DNA_layer3_stride = DNA_strides
+        self.dropout = dropout
+
+        self.linear_layer2, self.linear_layer3, self.linear_layer4 = linear_layers
+
+        # self.linear_layer2 = 250
+        # self.linear_layer3 = 100
+        # self.linear_layer4 = 10
 
         self.loss_fn = loss_fn()
         self.optimizer = optimizer
@@ -17,16 +27,13 @@ class Model(pl.LightningModule):
         self.first_epoch_loss = None
         self.first_test_loss = None
 
-        # self.train_acc = torchmetrics.classification.Accuracy(task="binary")
-        # self.test_acc = torchmetrics.classification.Accuracy(task="binary")
-
         self.train_metrics = torchmetrics.MetricCollection(
             {
                 "accuracy": torchmetrics.classification.Accuracy(task="binary"),
                 "F1": torchmetrics.classification.F1Score(task="binary"),
                 "AUROC": torchmetrics.classification.AUROC(task="binary"),
-                "Precision": torchmetrics.classification.Precision(task="binary"),
-                "Recall": torchmetrics.classification.Recall(task="binary")
+                "precision": torchmetrics.classification.Precision(task="binary"),
+                "recall": torchmetrics.classification.Recall(task="binary")
             },
             prefix="train_",
         )
@@ -36,8 +43,8 @@ class Model(pl.LightningModule):
                 "accuracy": torchmetrics.classification.Accuracy(task="binary"),
                 "F1": torchmetrics.classification.F1Score(task="binary"),
                 "AUROC": torchmetrics.classification.AUROC(task="binary"),
-                "Precision": torchmetrics.classification.Precision(task="binary"),
-                "Recall": torchmetrics.classification.Recall(task="binary")
+                "precision": torchmetrics.classification.Precision(task="binary"),
+                "recall": torchmetrics.classification.Recall(task="binary")
             },
             prefix="test_",
         )
@@ -124,18 +131,32 @@ class Model(pl.LightningModule):
                         stride=self.DNA_layer3_stride, padding=0)
         )
 
-        #### Cross-Attention
-        self.attn = nn.MultiheadAttention(embed_dim=25, num_heads=5, batch_first=True)
+        #### Self-Attention
+        def get_shape_Conv1D(length, kernel_size, padding, stride, dilation=1):
+            return np.floor((length+2*padding-dilation*(kernel_size-1)-1)/stride+1).astype(int)
+        def get_num_heads(embedding_dim):
+            return max([d if embedding_dim % d == 0 else 1 for d in range(10, 1, -1)])
+        
+        out_dim1 = get_shape_Conv1D(500, self.DNA_layer1_kernel_size, 0, self.DNA_layer1_stride)
+        out_dim2 = get_shape_Conv1D(out_dim1, self.DNA_layer2_kernel_size, 0, self.DNA_layer2_stride)
+        embed_dimmension = get_shape_Conv1D(out_dim2, self.DNA_layer3_kernel_size, 0, self.DNA_layer3_stride)
+
+        self.attn = nn.MultiheadAttention(embed_dim=embed_dimmension, num_heads=5, batch_first=True)
 
         self.fc = nn.Sequential(
-            nn.Linear(125, 250),
+            nn.Linear(embed_dimmension*5, self.linear_layer2),
             nn.ReLU(),
-            nn.Linear(250, 100),
+            nn.Linear(self.linear_layer2, self.linear_layer3),
             nn.ReLU(),
-            nn.Linear(100, 10),
+            nn.Linear(self.linear_layer3, self.linear_layer4),
             nn.ReLU(),
-            nn.Linear(10, 1)
+            nn.Linear(self.linear_layer4, 1)
         )
+
+        # Original parameters
+        # self.linear_layer2 = 250
+        # self.linear_layer3 = 100
+        # self.linear_layer4 = 10
 
     def forward(self, sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3):
         sequence = sequence.to(torch.float32).permute(0, 2, 1) ### Changed to (B,C=4,L=500) to use Conv1D
@@ -169,10 +190,10 @@ class Model(pl.LightningModule):
         
         prediction = self.forward(sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3)
         loss = self.loss_fn(prediction, methylation.unsqueeze(-1).float())
-        self.log('train_loss', loss, on_epoch=True)
+        self.log('train_loss', loss, on_epoch=True, sync_dist=True)
 
         batch_metrics = self.train_metrics(torch.sigmoid(prediction.squeeze()), methylation)
-        self.log_dict(batch_metrics, on_epoch=True)
+        self.log_dict(batch_metrics, on_epoch=True, sync_dist=True)
 
         return loss
 
@@ -185,7 +206,7 @@ class Model(pl.LightningModule):
         if self.first_epoch_loss is not None:
             relative = epoch_loss / self.first_epoch_loss * 100
             print(f"Epoch: {self.current_epoch}: train_loss_relative", relative)
-            self.log("train_loss_relative", relative)
+            self.log("train_loss_relative", relative, sync_dist=True)
         
         # self.train_metrics.reset()
 
@@ -194,7 +215,7 @@ class Model(pl.LightningModule):
         sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3, methylation, coordinates = batch
         prediction = self.forward(sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3)
         loss = loss_fn(prediction, methylation.unsqueeze(-1).float())
-        self.log('val_loss', loss, on_epoch=True)
+        self.log('val_loss', loss, on_epoch=True, sync_dist=True)
         return loss
     ############################# NOT USING THIS ######################################
     
@@ -204,10 +225,10 @@ class Model(pl.LightningModule):
 
         prediction = self.forward(sequence, H3K4me3, H3K36me2, H3K27me3, H3K9me3)
         loss = self.loss_fn(prediction, methylation.unsqueeze(-1).float())
-        self.log('test_loss', loss.detach() / self.first_epoch_loss * 100)
+        self.log('test_loss', loss.detach() / self.first_epoch_loss * 100, on_step=True, on_epoch=True, sync_dist=True)
 
         test_metrics = self.test_metrics(torch.sigmoid(prediction.squeeze()), methylation)
-        self.log_dict(test_metrics, on_epoch=True)
+        self.log_dict(test_metrics, on_step=True, on_epoch=True, sync_dist=True)
 
         return loss
     
