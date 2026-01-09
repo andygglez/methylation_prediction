@@ -28,13 +28,17 @@ parser.add_argument('--accelerator', type=str)
 args = parser.parse_args()
 
 
-wandb_logger = WandbLogger(project="MethPrediction")
+# Configure wandb for offline mode (no internet on compute nodes)
+os.environ['WANDB_MODE'] = 'offline'
 os.environ['WANDB_API_KEY'] = '2a1829519497eaab2f05c336830a1d4b0a3a8238'
 ### sweep id: bmpmwvvh
 
+wandb_logger = WandbLogger(project="methylation_prediction")
+
 run = wandb.init(
     entity="andygglez-meth",
-    project="MethPrediction",
+    project="methylation_prediction",
+    mode="offline"
 )
 
 # Actualizar config con argumentos de línea de comandos
